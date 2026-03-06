@@ -4,7 +4,7 @@ FROM python:3.12-slim AS builder
 WORKDIR /app
 
 COPY app.py .
-RUN pip install --no-cache-dir flask --target /app/site-packages
+RUN pip install --no-cache-dir flask flask-limiter --target /app/site-packages
 
 
 # ---------- Stage 2: Runtime ----------

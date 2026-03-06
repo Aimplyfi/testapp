@@ -13,37 +13,53 @@ spec:
         app: vuln-server
     spec:
       automountServiceAccountToken: false
-
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
-
+      terminationGracePeriodSeconds: 30
       containers:
       - name: server
         image: vuln-server:1.0
         imagePullPolicy: IfNotPresent
-
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           capabilities:
             drop:
               - ALL
-
         ports:
         - containerPort: 5000
-
         resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
           limits:
             cpu: "200m"
             memory: "256Mi"
-
         volumeMounts:
         - name: tmp
           mountPath: /tmp
-
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
       volumes:
       - name: tmp
         emptyDir: {}

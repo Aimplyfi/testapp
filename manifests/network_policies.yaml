@@ -1,13 +1,30 @@
+# -------------------------
+# Default deny all ingress
+# -------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: default-deny-all
+  name: default-deny-ingress
 spec:
   podSelector: {}
   policyTypes:
   - Ingress
+---
+# -------------------------
+# Default deny all egress
+# -------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+spec:
+  podSelector: {}
+  policyTypes:
   - Egress
 ---
+# -------------------------
+# Allow client → server
+# -------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -27,31 +44,44 @@ spec:
     - protocol: TCP
       port: 5000
 ---
+# -------------------------
+# Allow server egress reply
+# -------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: client-egress-only-server
+  name: allow-server-egress
 spec:
   podSelector:
     matchLabels:
-      app: exploit-client
+      app: vuln-server
   policyTypes:
   - Egress
   egress:
   - to:
     - podSelector:
         matchLabels:
-          app: vuln-server
-    ports:
-    - protocol: TCP
-      port: 5000
+          app: exploit-client
+---
+# -------------------------
+# Allow DNS resolution
+# -------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+
+  egress:
   - to:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: kube-system
-      podSelector:
-        matchLabels:
-          k8s-app: kube-dns
     ports:
     - protocol: UDP
+      port: 53
+    - protocol: TCP
       port: 53
