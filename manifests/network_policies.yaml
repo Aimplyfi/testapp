@@ -5,6 +5,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-ingress
+  namespace: testns
 spec:
   podSelector: {}
   policyTypes:
@@ -17,6 +18,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-egress
+  namespace: testns
 spec:
   podSelector: {}
   policyTypes:
@@ -29,6 +31,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-client-to-server
+  namespace: testns
 spec:
   podSelector:
     matchLabels:
@@ -51,6 +54,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-server-egress
+  namespace: testns
 spec:
   podSelector:
     matchLabels:
@@ -70,6 +74,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-dns
+  namespace: testns
 spec:
   podSelector: {}
   policyTypes:
@@ -79,7 +84,7 @@ spec:
   - to:
     - namespaceSelector:
         matchLabels:
-          kubernetes.io/metadata.name: kube-system
+          k8s-app: kube-dns
     ports:
     - protocol: UDP
       port: 53

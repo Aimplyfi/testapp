@@ -4,6 +4,7 @@ FROM python:3.12-slim AS builder
 WORKDIR /app
 
 COPY app.py .
+
 RUN pip install --no-cache-dir flask flask-limiter --target /app/site-packages
 
 
@@ -12,10 +13,12 @@ FROM gcr.io/distroless/python3
 
 WORKDIR /app
 
-# Copy app + dependencies
+# Copy application + dependencies
 COPY --from=builder /app /app
 
-# Run as non-root (distroless already has nonroot user)
+# Add site-packages to Python path
+ENV PYTHONPATH=/app/site-packages
+
 USER nonroot
 
 EXPOSE 5000

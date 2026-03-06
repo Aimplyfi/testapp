@@ -15,6 +15,9 @@ WORKDIR /app
 # Copy app + dependencies
 COPY --from=builder /app /app
 
+# Add site-packages to Python path
+ENV PYTHONPATH=/app/site-packages
+
 # Run as non-root (distroless already has nonroot user)
 USER nonroot
 
