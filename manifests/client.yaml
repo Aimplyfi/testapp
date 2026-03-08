@@ -14,7 +14,6 @@ spec:
         app: exploit-client
     spec:
       automountServiceAccountToken: false
-      serviceAccountName: restricted-user
       enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
@@ -34,6 +33,11 @@ spec:
           capabilities:
             drop:
               - ALL
+        env:
+        - name: SERVER_URL
+          value: "https://vuln-server-service.testns.svc.cluster.local/run"
+        - name: CA_CERT_PATH
+          value: "/tls/ca.crt"
         resources:
           requests:
             cpu: "25m"
@@ -44,11 +48,14 @@ spec:
         volumeMounts:
         - name: tmp
           mountPath: /tmp
-        # optional but useful if client loop is long running
+        # CA certificate used to verify the server's TLS certificate
+        - name: client-ca
+          mountPath: /tls
+          readOnly: true
         livenessProbe:
           exec:
             command:
-            - python
+            - python3
             - -c
             - "print('alive')"
           initialDelaySeconds: 10
@@ -58,3 +65,12 @@ spec:
       volumes:
       - name: tmp
         emptyDir: {}
+      # Only the CA cert is needed on the client side — NOT the private key.
+      # The Secret is created by cert-init-job.yaml.
+      - name: client-ca
+        secret:
+          secretName: vuln-server-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+          defaultMode: 0444

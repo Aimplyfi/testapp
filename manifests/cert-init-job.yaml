@@ -1,0 +1,161 @@
+# =============================================================================
+# cert-init-job.yaml
+#
+# One-time Job that generates:
+#   • A self-signed CA  (ca.key / ca.crt)
+#   • A server TLS cert signed by that CA  (tls.key / tls.crt)
+#
+# Both are stored in the Secret "vuln-server-tls" in namespace "testns".
+# The server mounts tls.crt + tls.key; the client mounts ca.crt only.
+#
+# PRODUCTION NOTE: Replace this Job with cert-manager (or Vault PKI) for
+# automatic rotation and proper CA management.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cert-init
+  namespace: testns
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 120
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: true   # needed to create the Secret via kubectl
+      serviceAccountName: cert-init-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: cert-gen
+        image: bitnami/kubectl:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -exc
+        - |
+          # ── 1. Remove any stale Secret so the new cert is always applied ──────
+          kubectl delete secret vuln-server-tls -n testns --ignore-not-found
+
+          # ── 2. Generate CA private key + self-signed cert ──────────────────
+          # CA cert must include BasicConstraints (ca:TRUE) and KeyUsage
+          # (keyCertSign, cRLSign) — required by Python 3.13+ ssl module
+          # which strictly enforces RFC 5280 CA certificate requirements.
+          printf '[req]\ndistinguished_name=req\n[CA_ext]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n' > /tmp/ca.cnf
+
+          openssl genrsa -out /tmp/ca.key 4096
+
+          openssl req -new -x509 \
+            -key /tmp/ca.key \
+            -out /tmp/ca.crt \
+            -days 3650 \
+            -subj "/CN=vuln-server-ca/O=internal" \
+            -extensions CA_ext \
+            -config /tmp/ca.cnf
+
+          echo "=== CA cert extensions ==="
+          openssl x509 -in /tmp/ca.crt -noout -ext basicConstraints,keyUsage
+
+          # ── 3. Generate server private key + CSR ───────────────────────────
+          openssl genrsa -out /tmp/tls.key 4096
+
+          openssl req -new \
+            -key /tmp/tls.key \
+            -out /tmp/tls.csr \
+            -subj "/CN=vuln-server-service.testns.svc.cluster.local/O=internal"
+
+          # ── 4. Sign the server cert with the CA ────────────────────────────
+          # printf is used instead of a heredoc because heredocs inside a YAML
+          # block scalar break the YAML parser. printf writes the file with no
+          # leading whitespace, which openssl requires to parse section headers.
+          printf '[req]\ndistinguished_name=req\n[SAN]\nsubjectAltName=DNS:vuln-server-service,DNS:vuln-server-service.testns,DNS:vuln-server-service.testns.svc,DNS:vuln-server-service.testns.svc.cluster.local\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nbasicConstraints=critical,CA:FALSE\n' > /tmp/ext.cnf
+
+          echo "=== ext.cnf contents ==="
+          cat /tmp/ext.cnf
+
+          openssl x509 -req \
+            -in /tmp/tls.csr \
+            -CA /tmp/ca.crt \
+            -CAkey /tmp/ca.key \
+            -CAcreateserial \
+            -out /tmp/tls.crt \
+            -days 365 \
+            -extensions SAN \
+            -extfile /tmp/ext.cnf
+
+          # ── 5. Verify all extensions are present before storing ───────────
+          echo "=== SANs and extensions in generated cert ==="
+          openssl x509 -in /tmp/tls.crt -noout -ext subjectAltName,keyUsage,extendedKeyUsage,basicConstraints
+
+          # ── 5. Store as a Kubernetes Secret in testns (upsert) ────────────
+          kubectl create secret generic vuln-server-tls \
+            --from-file=ca.crt=/tmp/ca.crt \
+            --from-file=tls.crt=/tmp/tls.crt \
+            --from-file=tls.key=/tmp/tls.key \
+            --namespace=testns \
+            --dry-run=client -o yaml | kubectl apply -n testns -f -
+
+          # ── 6. Restart deployments to pick up the new Secret immediately ───
+          kubectl rollout restart deployment/vuln-server    -n testns
+          kubectl rollout restart deployment/exploit-client -n testns
+
+          # ── 7. Wipe key material from the tmp filesystem ───────────────────
+          shred -u /tmp/ca.key /tmp/tls.key /tmp/tls.csr 2>/dev/null || \
+            rm -f /tmp/ca.key /tmp/tls.key /tmp/tls.csr
+          echo "=== Done. Certificates stored in Secret 'vuln-server-tls' (namespace: testns) ==="
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false   # openssl writes ephemeral files to /tmp
+          capabilities:
+            drop:
+              - ALL
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "128Mi"
+---
+# ServiceAccount for the cert-init Job
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cert-init-sa
+  namespace: testns
+---
+# Role: only permissions needed — create/update the one Secret in testns
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cert-init-role
+  namespace: testns
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cert-init-rolebinding
+  namespace: testns
+subjects:
+- kind: ServiceAccount
+  name: cert-init-sa
+  namespace: testns
+roleRef:
+  kind: Role
+  name: cert-init-role
+  apiGroup: rbac.authorization.k8s.io
