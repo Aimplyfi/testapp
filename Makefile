@@ -20,6 +20,7 @@ deploy:
 	kubectl apply -f manifests/rbac_policies.yaml
 	kubectl apply -f manifests/network_policies.yaml
 	kubectl apply -f manifests/cert-init-job.yaml
+	kubectl apply -f manifests/jwt-secret-job.yaml
 	sleep 5
 	kubectl apply -f manifests/server.yaml
 	kubectl apply -f manifests/client.yaml
@@ -29,6 +30,7 @@ undeploy:
 	kubectl delete --ignore-not-found=true -f manifests/network_policies.yaml
 	kubectl delete --ignore-not-found=true -f manifests/server.yaml
 	kubectl delete --ignore-not-found=true -f manifests/client.yaml
+	kubectl delete --ignore-not-found=true -f manifests/jwt-secret-job.yaml
 	kubectl delete --ignore-not-found=true -f manifests/cert-init-job.yaml
 	kubectl delete --ignore-not-found=true -f manifests/namespace-security.yaml
 

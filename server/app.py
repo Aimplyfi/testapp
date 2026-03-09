@@ -1,14 +1,18 @@
 import operator
 import logging
+import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
+import jwt
 
 # -------------------------
 # Logging
@@ -16,6 +20,32 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# -------------------------
+# JWT configuration
+# Secret is mounted from a Kubernetes Secret at /jwt/jwt.secret.
+# Audience and issuer are fixed strings shared between client and server.
+# -------------------------
+
+_JWT_SECRET_PATH = os.getenv("JWT_SECRET_PATH", "/jwt/jwt.secret")
+_JWT_ALGORITHM   = "HS256"
+JWT_ISSUER       = "exploit-client"
+JWT_AUDIENCE     = "vuln-server"
+JWT_LEEWAY_SEC   = 10   # clock-skew tolerance
+
+
+def _load_jwt_secret() -> str:
+    try:
+        secret = open(_JWT_SECRET_PATH).read().strip()
+    except OSError as exc:
+        raise RuntimeError(f"Cannot read JWT secret from {_JWT_SECRET_PATH}: {exc}") from exc
+    if len(secret) < 32:
+        raise RuntimeError("JWT secret must be at least 32 characters")
+    return secret
+
+
+# Load once at startup; the value never changes during the pod's lifetime.
+JWT_SECRET: str = _load_jwt_secret()
 
 # -------------------------
 # Rate limiter (slowapi — drop-in for FastAPI)
@@ -81,6 +111,45 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RequestSizeLimitMiddleware)
 
 # -------------------------
+# JWT bearer dependency
+# -------------------------
+
+_bearer = HTTPBearer(auto_error=False)
+
+async def require_jwt(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+) -> dict:
+    """
+    Validates the Bearer JWT in the Authorization header.
+    Raises HTTP 401 for missing/invalid tokens, 403 for wrong audience/issuer.
+    Returns the decoded payload so routes can inspect claims if needed.
+    """
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            JWT_SECRET,
+            algorithms=[_JWT_ALGORITHM],
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+            leeway=JWT_LEEWAY_SEC,
+            options={"require": ["exp", "iat", "iss", "aud", "sub"]},
+        )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidAudienceError:
+        raise HTTPException(status_code=403, detail="Invalid token audience")
+    except jwt.InvalidIssuerError:
+        raise HTTPException(status_code=403, detail="Invalid token issuer")
+    except jwt.PyJWTError as exc:
+        logger.warning("JWT validation failed: %s", exc)
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    return payload
+
+# -------------------------
 # Allowed operations
 # -------------------------
 
@@ -125,26 +194,34 @@ async def internal_error_handler(request: Request, exc: Exception):
 
 @app.get("/health")
 async def health():
-    """Kubernetes liveness / readiness probe."""
+    """Kubernetes liveness / readiness probe — no auth required."""
     return {"status": "ok"}
 
 
 @app.get("/")
 @limiter.limit("10/minute")
-async def home(request: Request):
+async def home(request: Request, _: dict = Depends(require_jwt)):
     return {"status": "Server running"}
 
 
 @app.post("/run")
 @limiter.limit("10/minute")
-async def run(request: Request, body: ComputeRequest):
+async def run(
+    request: Request,
+    body: ComputeRequest,
+    token_payload: dict = Depends(require_jwt),
+):
     """Perform an arithmetic operation and return the result."""
     try:
         result = ALLOWED_OPERATIONS[body.operation](body.a, body.b)
     except ZeroDivisionError:
         raise HTTPException(status_code=400, detail="Division by zero")
 
-    logger.info("Operation executed: %s %s %s", body.a, body.operation, body.b)
+    logger.info(
+        "Operation executed: %s %s %s (sub=%s)",
+        body.a, body.operation, body.b,
+        token_payload.get("sub"),
+    )
 
     return {
         "operation": body.operation,

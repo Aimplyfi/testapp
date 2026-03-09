@@ -60,6 +60,10 @@ spec:
         - name: server-tls
           mountPath: /tls
           readOnly: true
+        # JWT shared secret for verifying incoming Bearer tokens
+        - name: jwt-secret
+          mountPath: /jwt
+          readOnly: true
         livenessProbe:
           httpGet:
             path: /health
@@ -85,7 +89,12 @@ spec:
       - name: server-tls
         secret:
           secretName: vuln-server-tls
-          defaultMode: 0400   # owner read-only — private key must not be world-readable
+          defaultMode: 0400
+      # JWT shared secret — readable by owner only
+      - name: jwt-secret
+        secret:
+          secretName: vuln-jwt-secret
+          defaultMode: 0400
 ---
 apiVersion: v1
 kind: Service
