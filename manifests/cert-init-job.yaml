@@ -76,7 +76,36 @@ spec:
           # printf is used instead of a heredoc because heredocs inside a YAML
           # block scalar break the YAML parser. printf writes the file with no
           # leading whitespace, which openssl requires to parse section headers.
-          printf '[req]\ndistinguished_name=req\n[SAN]\nsubjectAltName=DNS:vuln-server-service,DNS:vuln-server-service.testns,DNS:vuln-server-service.testns.svc,DNS:vuln-server-service.testns.svc.cluster.local\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nbasicConstraints=critical,CA:FALSE\n' > /tmp/ext.cnf
+          # ── 4. Discover LoadBalancer hostname/IP and build full SAN list ─────
+          # Wait up to 120s for the LB to be assigned an external address.
+          LB_HOST=""
+          for i in $(seq 1 24); do
+            LB_HOST=$(kubectl get svc vuln-server-service -n testns \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            LB_IP=$(kubectl get svc vuln-server-service -n testns \
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+            [ -n "$LB_HOST" ] || [ -n "$LB_IP" ] && break
+            echo "Waiting for LoadBalancer address... ($i/24)"
+            sleep 5
+          done
+
+          # Build SAN string — always include cluster-internal names; add LB
+          # hostname/IP only if the LB has been assigned one by now.
+          SAN="DNS:vuln-server-service,DNS:vuln-server-service.testns,DNS:vuln-server-service.testns.svc,DNS:vuln-server-service.testns.svc.cluster.local"
+          if [ -n "$LB_HOST" ]; then
+            SAN="${SAN},DNS:${LB_HOST}"
+            echo "Adding LB hostname to SAN: $LB_HOST"
+          fi
+          if [ -n "$LB_IP" ]; then
+            SAN="${SAN},IP:${LB_IP}"
+            echo "Adding LB IP to SAN: $LB_IP"
+          fi
+          if [ -z "$LB_HOST" ] && [ -z "$LB_IP" ]; then
+            echo "WARNING: No LoadBalancer address assigned yet. Cert will not cover external hostname."
+            echo "Re-run the job after the LB is provisioned to regenerate the cert with the correct SAN."
+          fi
+
+          printf '[req]\ndistinguished_name=req\n[SAN]\nsubjectAltName=%s\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nbasicConstraints=critical,CA:FALSE\n' "$SAN" > /tmp/ext.cnf
 
           echo "=== ext.cnf contents ==="
           cat /tmp/ext.cnf
@@ -142,6 +171,9 @@ rules:
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get"]
 - apiGroups: ["apps"]
   resources: ["deployments"]
   verbs: ["get", "patch"]

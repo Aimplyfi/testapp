@@ -37,7 +37,7 @@ setup:
 	 sleep 30
 	 kubectl get pods -A
 	 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.5/config/manifests/metallb-native.yaml
-	 sleep 15
+	 sleep 30
 	 kubectl apply -f tests/conf/metallb.conf
 
 cleanup_testbed:

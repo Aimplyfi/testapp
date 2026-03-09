@@ -92,11 +92,20 @@ kind: Service
 metadata:
   name: vuln-server-service
   namespace: testns
+  # No cloud-provider annotations here — this manifest works on both kind
+  # (via MetalLB) and cloud clusters (AWS/GCP/Azure native LB controllers).
+  # Add cloud-specific annotations (e.g. aws-load-balancer-type) in an
+  # overlay or patch file for cloud deployments.
 spec:
+  type: LoadBalancer
+  # externalTrafficPolicy: Local preserves the real client source IP and
+  # avoids a second node hop. Works correctly with MetalLB L2 mode because
+  # MetalLB always routes traffic to a node that has a ready pod endpoint.
+  externalTrafficPolicy: Local
   selector:
     app: vuln-server
   ports:
-    - name: https
-      port: 443
-      targetPort: 8443
-  type: ClusterIP
+  - name: https
+    protocol: TCP
+    port: 443
+    targetPort: 8443

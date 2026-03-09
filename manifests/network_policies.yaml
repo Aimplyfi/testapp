@@ -25,9 +25,7 @@ spec:
   - Egress
 ---
 # -------------------------
-# Allow client → server (HTTPS/TLS on 8443)
-# Matches on pod IP — kube-proxy rewrites Service VIP to pod IP
-# before the network policy is evaluated on the receiving pod.
+# Allow internal client → server (pod-to-pod, HTTPS on 8443)
 # -------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -50,13 +48,33 @@ spec:
       port: 8443
 ---
 # -------------------------
-# Allow client egress → server on 443 (Service port) and 8443 (pod port)
-# The client connects to the Service ClusterIP on port 443. kube-proxy
-# DNAT rewrites this to the pod IP:8443, but on some CNI implementations
-# (e.g. Cilium, kube-proxy in iptables mode) the egress NetworkPolicy is
-# evaluated BEFORE DNAT on the client node — so the destination seen by
-# the policy is still ClusterIP:443. Both ports must be permitted to
-# cover all CNI implementations.
+# Allow external ingress → server on 8443
+# External traffic arrives from the LoadBalancer / node via the host
+# network — it has no pod label so podSelector cannot match it.
+# An empty `from: []` block allows ingress from any source (including
+# the LB health-check probes and external clients). Scoped to port 8443
+# only; all other ports remain denied by the default-deny rule above.
+# -------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-to-server
+  namespace: testns
+spec:
+  podSelector:
+    matchLabels:
+      app: vuln-server
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 8443
+---
+# -------------------------
+# Allow client egress → server on 443 (Service ClusterIP) and 8443 (pod IP)
+# Both ports are needed because some CNI implementations evaluate egress
+# policy before kube-proxy DNAT rewrites ClusterIP:443 → podIP:8443.
 # -------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -81,7 +99,7 @@ spec:
       port: 8443
 ---
 # -------------------------
-# Allow server egress reply → client
+# Allow server egress reply → internal client
 # -------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -101,7 +119,7 @@ spec:
           app: exploit-client
 ---
 # -------------------------
-# Allow DNS resolution (both pods)
+# Allow DNS resolution (all pods)
 # -------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
