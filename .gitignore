@@ -208,3 +208,5 @@ __marimo__/
 
 .securevibes
 Tests/
+.env
+staging*
