@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dmarc-record
+  namespace: default
+  # This ConfigMap documents the required DMARC DNS TXT record for the domain.
+  # Apply using your DNS provider (e.g., Cloudflare, Route53) to create:
+  #   _dmarc.ip-targets.cmn2vt4ql0001nw01ul0mmy5x TXT "v=DMARC1; p=none; rua=mailto:postmaster@ip-targets.cmn2vt4ql0001nw01ul0mmy5x"
+
+data:
+  # The actual DNS record should be added outside of Kubernetes.
+  # This entry serves as a source‑of‑truth for the required DMARC policy.
+  _dmarc.ip-targets.cmn2vt4ql0001nw01ul0mmy5x: "v=DMARC1; p=none; rua=mailto:postmaster@ip-targets.cmn2vt4ql0001nw01ul0mmy5x"
