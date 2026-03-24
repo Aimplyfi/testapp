@@ -1,4 +1,5 @@
 from flask import Flask, request
+import ast
 
 app = Flask(__name__)
 
@@ -14,7 +15,12 @@ def run():
         return "No command provided"
 
     # 🚨 VULNERABILITY: unsafe eval
-    result = eval(cmd)   # DO NOT EVER DO THIS IN REAL CODE
+    # Safely evaluate literal expressions using ast.literal_eval
+    try:
+        result = ast.literal_eval(cmd)
+    except Exception:
+        return "Invalid input"
+    # End of safe eval
     return str(result)
 
 if __name__ == "__main__":
