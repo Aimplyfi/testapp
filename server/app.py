@@ -13,8 +13,13 @@ def run():
     if not cmd:
         return "No command provided"
 
-    # 🚨 VULNERABILITY: unsafe eval
-    result = eval(cmd)   # DO NOT EVER DO THIS IN REAL CODE
+    # ✅ Fixed: use safe literal evaluation
+    try:
+        import ast
+        result = ast.literal_eval(cmd)
+    except Exception:
+        return "Invalid input"
+
     return str(result)
 
 if __name__ == "__main__":
