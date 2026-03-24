@@ -14,7 +14,13 @@ def run():
         return "No command provided"
 
     # 🚨 VULNERABILITY: unsafe eval
-    result = eval(cmd)   # DO NOT EVER DO THIS IN REAL CODE
+    # Safely evaluate the expression using ast.literal_eval to prevent code execution
+    import ast
+    try:
+        result = ast.literal_eval(cmd)
+    except Exception:
+        return "Invalid expression"
+    # End of safe evaluation
     return str(result)
 
 if __name__ == "__main__":
