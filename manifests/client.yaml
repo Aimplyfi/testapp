@@ -16,3 +16,5 @@ spec:
       - name: client
         image: exploit-client:1.0
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
