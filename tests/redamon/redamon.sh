@@ -3,7 +3,7 @@
 # --- CONFIGURATION ---
 REPO_URL="https://github.com/samugit83/redamon.git"
 # Replace with your actual key or export it before running
-AI_API_KEY="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"
+AI_API_KEY=""
 TARGET_NAMESPACE="testns"
 TARGET_SERVICE_NAME="vuln-server-service"
 
