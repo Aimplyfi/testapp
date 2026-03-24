@@ -1,5 +1,6 @@
-from flask import Flask, request
+import ast
 
+from flask import Flask, request
 app = Flask(__name__)
 
 @app.route("/")
@@ -14,7 +15,10 @@ def run():
         return "No command provided"
 
     # 🚨 VULNERABILITY: unsafe eval
-    result = eval(cmd)   # DO NOT EVER DO THIS IN REAL CODE
+    try:
+        result = ast.literal_eval(cmd)
+    except Exception as e:
+        return f"Invalid input: {e}"
     return str(result)
 
 if __name__ == "__main__":
