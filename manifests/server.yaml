@@ -12,6 +12,8 @@ spec:
       labels:
         app: vuln-server
     spec:
+      securityContext:
+        runAsNonRoot: true
       containers:
       - name: server
         image: vuln-server:1.0

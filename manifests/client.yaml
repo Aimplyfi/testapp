@@ -12,6 +12,8 @@ spec:
       labels:
         app: exploit-client
     spec:
+      securityContext:
+        runAsNonRoot: true
       containers:
       - name: client
         image: exploit-client:1.0
