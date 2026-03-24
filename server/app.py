@@ -18,4 +18,5 @@ def run():
     return str(result)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Run the Flask app with TLS. Cert and key are expected to be in the container root.
+    app.run(host="0.0.0.0", port=5000, ssl_context=('cert.pem', 'key.pem'))
