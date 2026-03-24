@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dmarc-record
+  namespace: default
+  annotations:
+    # This ConfigMap can be used by external-dns or CoreDNS to provide a DMARC TXT record
+    # for the domain ip-targets.cmn4mtwux0004p301957srrrc.
+    # The record follows the recommended policy to reject unauthenticated emails.
+    # Adjust the rua email address as needed.
+
+data:
+  ip-targets.cmn4mtwux0004p301957srrrc: "v=DMARC1; p=reject; rua=mailto:postmaster@ip-targets.cmn4mtwux0004p301957srrrc"

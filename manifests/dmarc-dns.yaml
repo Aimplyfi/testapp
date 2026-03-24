@@ -1,0 +1,12 @@
+apiVersion: externaldns.k8s.io/v1alpha1
+kind: DNSEndpoint
+metadata:
+  name: dmarc-ip-targets
+  namespace: default
+spec:
+  endpoints:
+  - dnsName: "_dmarc.ip-targets.cmn4mtwux0004p301957srrrc"
+    recordTTL: 300
+    recordType: TXT
+    targets:
+    - "\"v=DMARC1; p=reject; rua=mailto:postmaster@ip-targets.cmn4mtwux0004p301957srrrc\""
