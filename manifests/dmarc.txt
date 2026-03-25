@@ -1,0 +1,1 @@
+v=DMARC1; p=reject; rua=mailto:postmaster@ip-targets.cmn5j79710002m001fxxh53cy
