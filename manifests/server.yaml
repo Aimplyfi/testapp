@@ -16,6 +16,8 @@ spec:
       - name: server
         image: vuln-server:1.0
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
         ports:
         - containerPort: 5000
 ---
