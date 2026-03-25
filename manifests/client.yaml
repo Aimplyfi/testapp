@@ -16,3 +16,6 @@ spec:
       - name: client
         image: exploit-client:1.0
         imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
